@@ -19,7 +19,7 @@ class AnswerAPI:
         request: str,
         window_size=1,
         step_size=1,
-        treshold=0.78,
+        treshold_green=0.78,
         auth=config.auth,
         model=SentenceTransformer("intfloat/multilingual-e5-large"),
     ):
@@ -27,7 +27,7 @@ class AnswerAPI:
         self.request = request
         self.window_size = window_size
         self.step_size = step_size
-        self.treshold = treshold
+        self.treshold_green = treshold_green
         self.auth = auth
         self.model = model
 
@@ -67,7 +67,7 @@ class AnswerAPI:
         path = f"files/{self.document_name[:-4]}_modified.pdf"
         document.save(path)
 
-    def selection_candidates(self, text_query, text_links): # переименовать функцию
+    def selection_candidates(self, text_query, text_links):
         """
         Отбор предложений-кандидатов
 
@@ -99,7 +99,7 @@ class AnswerAPI:
                 "text": text_links[i],
                 "embedder_score": float(answer[i]),
             }
-            if answer[i] > self.treshold:
+            if answer[i] > self.treshold_green:
                 list_of_candidates.append(i)
 
         return dict_of_all_candidats, list_of_candidates

@@ -35,6 +35,7 @@ from api import AnswerAPI
 
 TOKEN = config.test_api_key
 
+# Добавить описания функций
 # Нужно для поднятия локальной базы, что бы созранять передменные
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
@@ -46,21 +47,20 @@ async def command_help_handler(message: Message, state: FSMContext) -> None:
     await message.answer(help_message_text)
 
 
-# @dp.message(UserStates.processing)
-# async def processing_handler(message: Message, state: FSMContext) -> None:
-#     await message.answer(help_message_text) #processing_message_text)
-
-
 @dp.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
-    # Можно довабить удаление сообщения при рефреше 
+    data = await state.get_data()
+    try:
+        message_id = data["delete_messege"]
+        await bot.delete_messages(chat_id=message.chat.id, message_ids=message_id)
+    except KeyError:
+        await message.answer(hello_message_text, reply_markup=ReplyKeyboardRemove())
     await state.set_state(UserStates.get_params)
-    await message.answer(hello_message_text, reply_markup=ReplyKeyboardRemove())
     await message.answer(start_message_text)
-    await message.answer(pdf_message_text)
+    message_pdf = await message.answer(pdf_message_text)
     messege_id = message.message_id
     user_id = message.from_user.id
-    await state.update_data(delete_messege=[messege_id + 3], user_id=user_id)
+    await state.update_data(delete_messege=[message_pdf.message_id], user_id=user_id)
     await state.set_state(UserStates.get_pdf)
 
 
@@ -98,7 +98,7 @@ async def warning_not_pdf(message: Message, state: FSMContext):
     messege_id = message.message_id
     await state.update_data(delete_messege=[messege_id, messege_id + 1])
     data = await state.get_data()
-    message_id = data["delete_messege"]  # можно улучшить удаление файлов
+    message_id = data["delete_messege"]
 
 
 # @dp.callback_query(UserStates.get_query, F.data.startswith('empty'))
@@ -125,7 +125,7 @@ async def warning_not_query(message: Message, state: FSMContext) -> None:
     message_id = data["delete_messege"]
     message_id.append(
         message.message_id - 1
-    )  # тут можно поиграть с id и убрать этот append или на 100 строке
+    )  
 
     await bot.delete_messages(chat_id=message.chat.id, message_ids=message_id)
     answer_text = f"{warning_query_message}\n\n{query_message_text}"
@@ -154,11 +154,12 @@ async def send_file(message: Message, state: FSMContext) -> None:
     message_id = msg.message_id
     await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
     await message.answer_document(FSInputFile(path))
-    message_after =  await message.answer('Можно отправить еще один запрос или нажать /start для нового запроса')
+    message_after =  await message.answer(against_query_message_text)
     await state.update_data(delete_messege=[message_after.message_id])
-    # доделать кнопки рефреш и кнопку для ввода нового запроса
+    await state.set_state(UserStates.get_query)
+    
 
-
+# заготовка
 async def delete_pdf(message: Message, state: FSMContext) -> None:
     user_data = await state.get_data()
     file_name = user_data["file_name"]
@@ -173,5 +174,4 @@ async def send_echo(message: Message):
 
 
 if __name__ == "__main__":
-    # logger.debug('Start polling')
     asyncio.run(dp.start_polling(bot))

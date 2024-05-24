@@ -67,7 +67,7 @@ class AnswerAPI:
         path = f"files/{self.document_name[:-4]}_modified.pdf"
         document.save(path)
 
-    def embeding(self, text_query, text_links): # переименовать функцию
+    def selection_candidates(self, text_query, text_links): # переименовать функцию
         """
         Отбор предложений-кандидатов
 
@@ -196,7 +196,7 @@ class AnswerAPI:
     def answer(self, text_query, links):
 
         text_links_prep = links
-        text_links, list_cand = self.embeding(text_query, text_links_prep)
+        text_links, list_cand = self.selection_candidates(text_query, text_links_prep)
 
         response = self.get_token()
         if response != -1:

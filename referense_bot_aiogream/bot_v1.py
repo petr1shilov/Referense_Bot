@@ -53,6 +53,7 @@ async def command_help_handler(message: Message, state: FSMContext) -> None:
 
 @dp.message(CommandStart())
 async def command_start_handler(message: Message, state: FSMContext) -> None:
+    # Можно довабить удаление сообщения при рефреше 
     await state.set_state(UserStates.get_params)
     await message.answer(hello_message_text, reply_markup=ReplyKeyboardRemove())
     await message.answer(start_message_text)
@@ -153,6 +154,8 @@ async def send_file(message: Message, state: FSMContext) -> None:
     message_id = msg.message_id
     await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
     await message.answer_document(FSInputFile(path))
+    message_after =  await message.answer('Можно отправить еще один запрос или нажать /start для нового запроса')
+    await state.update_data(delete_messege=[message_after.message_id])
     # доделать кнопки рефреш и кнопку для ввода нового запроса
 
 

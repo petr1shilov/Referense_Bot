@@ -19,7 +19,7 @@ class AnswerAPI:
         request: str,
         window_size=1,
         step_size=1,
-        tresh_hold=0.78,
+        treshold=0.78,
         auth=config.auth,
         model=SentenceTransformer("intfloat/multilingual-e5-large"),
     ):
@@ -27,7 +27,7 @@ class AnswerAPI:
         self.request = request
         self.window_size = window_size
         self.step_size = step_size
-        self.tresh_hold = tresh_hold
+        self.treshold = treshold
         self.auth = auth
         self.model = model
 
@@ -67,7 +67,7 @@ class AnswerAPI:
         path = f"files/{self.document_name[:-4]}_modified.pdf"
         document.save(path)
 
-    def embeding(self, text_query, text_links, tresh_hold):
+    def embeding(self, text_query, text_links): # переименовать функцию
         """
         Отбор предложений-кандидатов
 
@@ -99,18 +99,18 @@ class AnswerAPI:
                 "text": text_links[i],
                 "embedder_score": float(answer[i]),
             }
-            if answer[i] > self.tresh_hold:
+            if answer[i] > self.treshold:
                 list_of_candidates.append(i)
 
         return dict_of_all_candidats, list_of_candidates
 
-    def get_token(self, auth_token, scope="GIGACHAT_API_PERS"):
+    def get_token(self, scope="GIGACHAT_API_PERS"):
         """
         Выполняет POST-запрос к эндпоинту, который выдает токен.
 
         Параметры:
         - auth_token (str): токен авторизации, необходимый для запроса.
-        - область (str): область действия запроса API. По умолчанию — «GIGACHAT_API_PERS».
+        - scope (str): область действия запроса API. По умолчанию — «GIGACHAT_API_PERS».
 
         Возвращает:
         - ответ API, где токен и срок его "годности".
@@ -126,7 +126,7 @@ class AnswerAPI:
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
             "RqUID": rq_uid,
-            "Authorization": f"Basic {auth_token}",
+            "Authorization": f"Basic {self.auth}",
         }
 
         # Тело запроса
@@ -141,7 +141,7 @@ class AnswerAPI:
             print(f"Ошибка: {str(e)}")
             return -1
 
-    def get_chat_completion(self, auth_token, user_message):
+    def get_chat_completion(self, auth_token: str, user_message: str):
         """
         Отправляет POST-запрос к API чата для получения ответа от модели GigaChat.
 
@@ -193,12 +193,12 @@ class AnswerAPI:
             print(f"Произошла ошибка: {str(e)}")
             return -1
 
-    def answer(self, text_query, links, tresh_hold):
+    def answer(self, text_query, links):
 
         text_links_prep = links
-        text_links, list_cand = self.embeding(text_query, text_links_prep, tresh_hold)
+        text_links, list_cand = self.embeding(text_query, text_links_prep)
 
-        response = self.get_token(self.auth)
+        response = self.get_token()
         if response != -1:
             giga_token = response.json()["access_token"]
 
@@ -241,6 +241,6 @@ class AnswerAPI:
         path = f"files/{self.document_name}"
         document = fitz.open(path)
         text = self.prepare_text(document)
-        sentences = self.answer(request, text, self.tresh_hold)
+        sentences = self.answer(request, text)
         self.modifi_document(sentences, document)
 

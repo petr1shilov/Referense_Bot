@@ -11,11 +11,11 @@ import math
 
 class AnswerAPI:
     # можно сделать как __init__ параметр
-    WINDOW_SIZE = 1
-    STEP_SIZE = 1
+    WINDOW_SIZE = 3
+    STEP_SIZE = 2
     TRESHOLD_GREEN = 0.78
     TRESHOLD_RED = 0.95
-    MAX_LEN = 10
+    MAX_CANDIDATES = 10
 
     def __init__(
         self,
@@ -25,7 +25,7 @@ class AnswerAPI:
         step_size=STEP_SIZE,
         treshold_green=TRESHOLD_GREEN,
         treshold_red=TRESHOLD_RED,
-        max_len=MAX_LEN,
+        max_candidates=MAX_CANDIDATES,
         auth=config.auth,
         model=SentenceTransformer("intfloat/multilingual-e5-large"),
     ):
@@ -35,7 +35,7 @@ class AnswerAPI:
         self.step_size = step_size
         self.treshold_green = treshold_green
         self.treshold_red = treshold_red
-        self.max_len = max_len
+        self.max_candidates = max_candidates
         self.auth = auth
         self.model = model
 
@@ -66,8 +66,13 @@ class AnswerAPI:
         for j in range(len(new_txt_list)):
             new_txt_list[j] = re.sub(r"([-]\n)", "", new_txt_list[j])
 
-        return new_txt_list
-        # доделать ширину окна и сдвиг(плохо работает на шаге (embedding))
+        splitted = [new_txt_list[i * self.step_size : i * self.step_size + self.window_size]\
+                     for i in range(math.ceil(len(new_txt_list) / self.step_size))]
+
+        splitted_text = ['. '.join(i) for i in splitted]
+
+        return splitted_text
+        
 
     def modifi_document(self, sentences, document):
         for page in document:
@@ -98,6 +103,10 @@ class AnswerAPI:
         - словарь с парой ключ-знанение, где ключ - порядновый номер предложения-кандидата
                 значние - само предложение-кандидат
         """
+        if len(text_links) < self.max_candidates:
+            max_len = len(text_links)
+        else:
+            max_len = self.max_candidates
 
         list_of_candidates_green = []
         list_of_candidates_red = []
@@ -105,24 +114,25 @@ class AnswerAPI:
 
         text_links.append(text_query)
 
-        # embeddings_query = model.encode(text_query, normalize_embeddings=False)
         embeddings_links = self.model.encode(text_links, normalize_embeddings=False)
         embeddings_query = embeddings_links[-1]
         embeddings_links = embeddings_links[:-1]
 
         answer = util.cos_sim(embeddings_query, embeddings_links)[0]
-
+        
+        top_list = answer.sort(descending=True)[1].tolist()[:max_len]
+        
         text_links.pop()
 
-        for i in range(len(answer)):
+        for i in top_list:
             dict_of_all_candidats[i] = {
                 "id": i,
                 "text": text_links[i],
                 "embedder_score": float(answer[i]),
             }
-            if answer[i] > self.treshold_green:
+            if answer[i] > 0.78:
                 list_of_candidates_green.append(i)
-            elif answer[i] > self.treshold_red:
+            if answer[i] > 0.95:
                 list_of_candidates_red.append(i)
 
         return dict_of_all_candidats, list_of_candidates_green, list_of_candidates_red
@@ -255,7 +265,7 @@ class AnswerAPI:
                             "embedder_score": text_links[i]["embedder_score"],
                             "LLM_response": llm_response,
                         }
-                    )
+                    )           
         return answer
 
     def get_modified_file(self):

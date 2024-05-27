@@ -11,15 +11,21 @@ import math
 
 class AnswerAPI:
     # можно сделать как __init__ параметр
-    # Брать топ n по трешхолду и сделать это n как параметр
+    WINDOW_SIZE = 1
+    STEP_SIZE = 1
+    TRESHOLD_GREEN = 0.78
+    TRESHOLD_RED = 0.95
+    MAX_LEN = 10
 
     def __init__(
         self,
         document_name: str,
         request: str,
-        window_size=1,
-        step_size=1,
-        treshold_green=0.78,
+        window_size=WINDOW_SIZE,
+        step_size=STEP_SIZE,
+        treshold_green=TRESHOLD_GREEN,
+        treshold_red=TRESHOLD_RED,
+        max_len=MAX_LEN,
         auth=config.auth,
         model=SentenceTransformer("intfloat/multilingual-e5-large"),
     ):
@@ -28,8 +34,21 @@ class AnswerAPI:
         self.window_size = window_size
         self.step_size = step_size
         self.treshold_green = treshold_green
+        self.treshold_red = treshold_red
+        self.max_len = max_len
         self.auth = auth
         self.model = model
+
+    def diplay_params(self):
+        print(f'''\tНазвание документа ==> {self.document_name}\n
+        Запрос к документу ==> {self.request}\n
+        Ширина скользящего окна {self.window_size}\n
+        Шаг скользящего окна ==> {self.step_size}\n
+        Порог для прямого подтверждения ==> {self.treshold_green}\n
+        Порог для отрицаний ==> {self.treshold_red}\n
+        Количество кандидатов ==> {self.max_len}\n
+        Ключ модели ==> {self.auth}\n
+        Модель ==> {self.model}''')
 
     def prepare_text(self, document):
         new_txt_list = []
@@ -80,7 +99,8 @@ class AnswerAPI:
                 значние - само предложение-кандидат
         """
 
-        list_of_candidates = []
+        list_of_candidates_green = []
+        list_of_candidates_red = []
         dict_of_all_candidats = {}
 
         text_links.append(text_query)
@@ -96,13 +116,16 @@ class AnswerAPI:
 
         for i in range(len(answer)):
             dict_of_all_candidats[i] = {
+                "id": i,
                 "text": text_links[i],
                 "embedder_score": float(answer[i]),
             }
             if answer[i] > self.treshold_green:
-                list_of_candidates.append(i)
+                list_of_candidates_green.append(i)
+            elif answer[i] > self.treshold_red:
+                list_of_candidates_red.append(i)
 
-        return dict_of_all_candidats, list_of_candidates
+        return dict_of_all_candidats, list_of_candidates_green, list_of_candidates_red
 
     def get_token(self, scope="GIGACHAT_API_PERS"):
         """
@@ -196,7 +219,7 @@ class AnswerAPI:
     def answer(self, text_query, links):
 
         text_links_prep = links
-        text_links, list_cand = self.selection_candidates(text_query, text_links_prep)
+        text_links, list_cand_green, list_cand_red  = self.selection_candidates(text_query, text_links_prep)
 
         response = self.get_token()
         if response != -1:
@@ -207,7 +230,7 @@ class AnswerAPI:
         for i in text_links:
             text_n = text_links[i]["text"]
 
-            if i in list_cand:
+            if i in list_cand_green:
                 text_for_api = f'Подтверждается ли текст "{text_query}" текстом "{text_n}"\nОтветь только "да" или "нет"'
                 answer_n = self.get_chat_completion(giga_token, text_for_api)
                 llm_response = str(
@@ -223,7 +246,7 @@ class AnswerAPI:
                             "LLM_response": llm_response,
                         }
                     )
-                elif "нет" in llm_response:
+                elif "нет" in llm_response and i in list_cand_red:
                     answer.append(
                         {
                             "sentence_idx": i,
@@ -233,7 +256,6 @@ class AnswerAPI:
                             "LLM_response": llm_response,
                         }
                     )
-
         return answer
 
     def get_modified_file(self):
@@ -243,4 +265,3 @@ class AnswerAPI:
         text = self.prepare_text(document)
         sentences = self.answer(request, text)
         self.modifi_document(sentences, document)
-

@@ -24,8 +24,9 @@ class AnswerAPI:
         window_size=WINDOW_SIZE,
         step_size=STEP_SIZE,
         treshold_green=TRESHOLD_GREEN,
+        max_candidates_green=MAX_CANDIDATES,
         treshold_red=TRESHOLD_RED,
-        max_candidates=MAX_CANDIDATES,
+        max_candidates_red=MAX_CANDIDATES,
         auth=config.auth,
         model=SentenceTransformer("intfloat/multilingual-e5-large"),
     ):
@@ -34,10 +35,24 @@ class AnswerAPI:
         self.window_size = window_size
         self.step_size = step_size
         self.treshold_green = treshold_green
+        self.max_candidates_green = max_candidates_green
         self.treshold_red = treshold_red
-        self.max_candidates = max_candidates
+        self.max_candidates_red = max_candidates_red
         self.auth = auth
         self.model = model
+
+    def change_parans(self):
+        request_text = re.split(r'\[.+\]', self.request)
+        request_text = request_text[1:]
+        clean_request_text = [re.sub(r"[\n]", "", i) for i in request_text]
+
+        self.request = str(clean_request_text[0])
+        self.window_size = int(clean_request_text[1])
+        self.step_size = int(clean_request_text[2])
+        self.treshold_green = float(clean_request_text[3])
+        self.max_candidates_green = int(clean_request_text[4])
+        self.treshold_red = float(clean_request_text[5])
+        self.max_candidates_red = int(clean_request_text[6])
 
     def diplay_params(self):
         print(f'''\tНазвание документа ==> {self.document_name}\n
@@ -46,7 +61,7 @@ class AnswerAPI:
         Шаг скользящего окна ==> {self.step_size}\n
         Порог для прямого подтверждения ==> {self.treshold_green}\n
         Порог для отрицаний ==> {self.treshold_red}\n
-        Количество кандидатов ==> {self.max_len}\n
+        Количество кандидатов ==> {self.max_candidates_green}\n
         Ключ модели ==> {self.auth}\n
         Модель ==> {self.model}''')
 
@@ -103,10 +118,6 @@ class AnswerAPI:
         - словарь с парой ключ-знанение, где ключ - порядновый номер предложения-кандидата
                 значние - само предложение-кандидат
         """
-        if len(text_links) < self.max_candidates:
-            max_len = len(text_links)
-        else:
-            max_len = self.max_candidates
 
         list_of_candidates_green = []
         list_of_candidates_red = []
@@ -120,11 +131,9 @@ class AnswerAPI:
 
         answer = util.cos_sim(embeddings_query, embeddings_links)[0]
         
-        top_list = answer.sort(descending=True)[1].tolist()[:max_len]
-        
         text_links.pop()
 
-        for i in top_list:
+        for i in range(len(answer)):
             dict_of_all_candidats[i] = {
                 "id": i,
                 "text": text_links[i],
@@ -135,7 +144,20 @@ class AnswerAPI:
             if answer[i] > 0.95:
                 list_of_candidates_red.append(i)
 
-        return dict_of_all_candidats, list_of_candidates_green, list_of_candidates_red
+        if len(list_of_candidates_green) < self.max_candidates_green:
+            max_len_green = len(list_of_candidates_green)
+        else:
+            max_len_green = self.max_candidates_green
+
+        if len(list_of_candidates_red) < self.max_candidates_red:
+            max_len_red = len(list_of_candidates_red)
+        else:
+            max_len_red = self.max_candidates_red
+        
+        list_of_candidates_green.sort(reverse=True)
+        list_of_candidates_red.sort(reverse=True)
+
+        return dict_of_all_candidats, list_of_candidates_green[:max_len_green], list_of_candidates_red[:max_len_red]
 
     def get_token(self, scope="GIGACHAT_API_PERS"):
         """
@@ -269,6 +291,7 @@ class AnswerAPI:
         return answer
 
     def get_modified_file(self):
+        self.change_parans()
         request = self.request
         path = f"files/{self.document_name}"
         document = fitz.open(path)

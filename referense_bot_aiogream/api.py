@@ -11,8 +11,8 @@ import math
 
 class AnswerAPI:
     # можно сделать как __init__ параметр
-    WINDOW_SIZE = 3
-    STEP_SIZE = 2
+    WINDOW_SIZE = 1
+    STEP_SIZE = 1
     TRESHOLD_GREEN = 0.78
     TRESHOLD_RED = 0.95
     MAX_CANDIDATES = 10
@@ -118,6 +118,15 @@ class AnswerAPI:
         - словарь с парой ключ-знанение, где ключ - порядновый номер предложения-кандидата
                 значние - само предложение-кандидат
         """
+        if self.treshold_red > self.treshold_green:
+            min_treshold = self.treshold_green
+            max_treshold = self.treshold_red
+            flag = True
+        else: 
+            min_treshold = self.treshold_red
+            max_treshold = self.treshold_green
+            flag = False
+            
 
         list_of_candidates_green = []
         list_of_candidates_red = []
@@ -130,34 +139,33 @@ class AnswerAPI:
         embeddings_links = embeddings_links[:-1]
 
         answer = util.cos_sim(embeddings_query, embeddings_links)[0]
-        
+        sorted_answer = answer.sort(descending=True)[1].tolist()
         text_links.pop()
 
-        for i in range(len(answer)):
-            dict_of_all_candidats[i] = {
-                "id": i,
-                "text": text_links[i],
-                "embedder_score": float(answer[i]),
-            }
-            if answer[i] > 0.78:
+        for i in sorted_answer:
+            if answer[i] > min_treshold:
+                dict_of_all_candidats[i] = {
+                    "id": i,
+                    "text": text_links[i],
+                    "embedder_score": float(answer[i]),
+                }
+            if flag and answer[i] > min_treshold:
                 list_of_candidates_green.append(i)
-            if answer[i] > 0.95:
+            elif not flag and answer[i] > max_treshold:
+                list_of_candidates_green.append(i)
+
+            if flag and answer[i] > max_treshold:
+                list_of_candidates_red.append(i)
+            if not flag and answer[i] > min_treshold:
                 list_of_candidates_red.append(i)
 
         if len(list_of_candidates_green) < self.max_candidates_green:
-            max_len_green = len(list_of_candidates_green)
-        else:
-            max_len_green = self.max_candidates_green
+            self.max_candidates_green = len(list_of_candidates_green)
 
         if len(list_of_candidates_red) < self.max_candidates_red:
-            max_len_red = len(list_of_candidates_red)
-        else:
-            max_len_red = self.max_candidates_red
-        
-        list_of_candidates_green.sort(reverse=True)
-        list_of_candidates_red.sort(reverse=True)
+            self.max_candidates_red = len(list_of_candidates_red)
 
-        return dict_of_all_candidats, list_of_candidates_green[:max_len_green], list_of_candidates_red[:max_len_red]
+        return dict_of_all_candidats, list_of_candidates_green, list_of_candidates_red, flag
 
     def get_token(self, scope="GIGACHAT_API_PERS"):
         """
@@ -251,7 +259,7 @@ class AnswerAPI:
     def answer(self, text_query, links):
 
         text_links_prep = links
-        text_links, list_cand_green, list_cand_red  = self.selection_candidates(text_query, text_links_prep)
+        text_links, list_cand_green, list_cand_red, flag  = self.selection_candidates(text_query, text_links_prep)
 
         response = self.get_token()
         if response != -1:
@@ -259,35 +267,88 @@ class AnswerAPI:
 
         answer = []
 
-        for i in text_links:
-            text_n = text_links[i]["text"]
+        if flag:
+            for i in text_links:
+                text_n = text_links[i]["text"]
 
-            if i in list_cand_green:
-                text_for_api = f'Подтверждается ли текст "{text_query}" текстом "{text_n}"\nОтветь только "да" или "нет"'
-                answer_n = self.get_chat_completion(giga_token, text_for_api)
-                llm_response = str(
-                    answer_n.json()["choices"][0]["message"]["content"]
-                ).lower()
-                if "да" in llm_response:
-                    answer.append(
-                        {
-                            "sentence_idx": i,
-                            "text": text_n,
-                            "color": "green",
-                            "embedder_score": text_links[i]["embedder_score"],
-                            "LLM_response": llm_response,
-                        }
-                    )
-                elif "нет" in llm_response and i in list_cand_red:
-                    answer.append(
-                        {
-                            "sentence_idx": i,
-                            "text": text_n,
-                            "color": "red",
-                            "embedder_score": text_links[i]["embedder_score"],
-                            "LLM_response": llm_response,
-                        }
-                    )           
+                if i in list_cand_green[:self.max_candidates_green]:
+                    text_for_api = f'Подтверждается ли текст "{text_query}" текстом "{text_n}"\nОтветь только "да" или "нет"'
+                    answer_n = self.get_chat_completion(giga_token, text_for_api)
+                    llm_response = str(
+                        answer_n.json()["choices"][0]["message"]["content"]
+                    ).lower()
+                    if "да" in llm_response:
+                        answer.append(
+                            {
+                                "sentence_idx": i,
+                                "text": text_n,
+                                "color": "green",
+                                "embedder_score": text_links[i]["embedder_score"],
+                                "LLM_response": llm_response,
+                            }
+                        )    
+                    if i in list_cand_red:
+                        list_cand_red.remove(i)   
+            for i in text_links:
+                text_n = text_links[i]["text"]
+
+                if i in list_cand_red[:self.max_candidates_red]:
+                    text_for_api = f'Противоречит ли текст "{text_query}" с текстом "{text_n}"\nОтветь только "да" или "нет"'
+                    answer_n = self.get_chat_completion(giga_token, text_for_api)
+                    llm_response = str(
+                        answer_n.json()["choices"][0]["message"]["content"]
+                    ).lower()
+                    if "да" in llm_response:
+                        answer.append(
+                            {
+                                "sentence_idx": i,
+                                "text": text_n,
+                                "color": "red",
+                                "embedder_score": text_links[i]["embedder_score"],
+                                "LLM_response": llm_response,
+                            }
+                        ) 
+        else:
+            for i in text_links:
+                text_n = text_links[i]["text"]
+
+                if i in list_cand_red[:self.max_candidates_red]:
+                    text_for_api = f'Противоречит ли текст "{text_query}" с текстом "{text_n}"\nОтветь только "да" или "нет"'
+                    answer_n = self.get_chat_completion(giga_token, text_for_api)
+                    llm_response = str(
+                        answer_n.json()["choices"][0]["message"]["content"]
+                    ).lower()
+                    if "да" in llm_response:
+                        answer.append(
+                            {
+                                "sentence_idx": i,
+                                "text": text_n,
+                                "color": "red",
+                                "embedder_score": text_links[i]["embedder_score"],
+                                "LLM_response": llm_response,
+                            }
+                        ) 
+                    if i in list_cand_green:
+                        list_cand_green.remove(i)
+            for i in text_links:
+                text_n = text_links[i]["text"]
+
+                if i in list_cand_green[:self.max_candidates_green]:
+                    text_for_api = f'Подтверждается ли текст "{text_query}" текстом "{text_n}"\nОтветь только "да" или "нет"'
+                    answer_n = self.get_chat_completion(giga_token, text_for_api)
+                    llm_response = str(
+                        answer_n.json()["choices"][0]["message"]["content"]
+                    ).lower()
+                    if "да" in llm_response:
+                        answer.append(
+                            {
+                                "sentence_idx": i,
+                                "text": text_n,
+                                "color": "green",
+                                "embedder_score": text_links[i]["embedder_score"],
+                                "LLM_response": llm_response,
+                            }
+                        )                    
         return answer
 
     def get_modified_file(self):
@@ -298,3 +359,9 @@ class AnswerAPI:
         text = self.prepare_text(document)
         sentences = self.answer(request, text)
         self.modifi_document(sentences, document)
+
+
+
+
+
+

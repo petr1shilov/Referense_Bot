@@ -152,8 +152,7 @@ async def send_file(message: Message, state: FSMContext) -> None:
     if not answer_test:
         message_id = msg.message_id
         await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
-        answer_text = f"Что-то пошло не по плану\n\n{query_message_text}"
-        text_error = await message.answer(text=answer_text)
+        text_error = await message.answer(error_text)
         await state.update_data(delete_messege=[text_error.message_id])
     else:
         message_id = msg.message_id

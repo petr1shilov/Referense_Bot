@@ -41,7 +41,7 @@ class AnswerAPI:
         self.auth = auth
         self.model = model
 
-    def change_parans(self):
+    def change_params(self):
         request_text = re.split(r'\[.+\]', self.request)
         request_text = request_text[1:]
         clean_request_text = [re.sub(r"[\n]", "", i) for i in request_text]
@@ -87,7 +87,6 @@ class AnswerAPI:
         splitted_text = ['. '.join(i) for i in splitted]
 
         return splitted_text
-        
 
     def modifi_document(self, sentences, document):
         for page in document:
@@ -352,9 +351,9 @@ class AnswerAPI:
         return answer
 
     def get_modified_file(self):
-        try :
-            self.change_parans()
-        except ValueError:
+        try:
+            self.change_params()
+        except:
             return False
         request = self.request
         path = f"files/{self.document_name}"

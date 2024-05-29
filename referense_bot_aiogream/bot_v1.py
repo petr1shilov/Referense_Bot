@@ -147,16 +147,21 @@ async def send_file(message: Message, state: FSMContext) -> None:
     test = AnswerAPI(
         file_name, request
     )  # придумать как лучше ввести изменение параметров
-    test.get_modified_file()
+    answer_test = test.get_modified_file()
 
-    while not os.path.exists(path=path):
-        time.sleep(0.5)
-    message_id = msg.message_id
-    await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
-    await message.answer_document(FSInputFile(path))
-    message_after =  await message.answer(against_query_message_text)
-    await state.update_data(delete_messege=[message_after.message_id])
-    await state.set_state(UserStates.get_query)
+    if not answer_test:
+        message_id = msg.message_id
+        await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
+        answer_text = f"Что-то пошло не по плану\n\n{query_message_text}"
+        text_error = await message.answer(text=answer_text)
+        await state.update_data(delete_messege=[text_error.message_id])
+    else:
+        message_id = msg.message_id
+        await bot.delete_messages(chat_id=message.chat.id, message_ids=[message_id])
+        await message.answer_document(FSInputFile(path))
+        message_after =  await message.answer(against_query_message_text)
+        await state.update_data(delete_messege=[message_after.message_id])
+        await state.set_state(UserStates.get_query)
     
 
 # заготовка

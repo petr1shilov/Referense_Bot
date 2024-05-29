@@ -352,13 +352,17 @@ class AnswerAPI:
         return answer
 
     def get_modified_file(self):
-        self.change_parans()
+        try :
+            self.change_parans()
+        except ValueError:
+            return False
         request = self.request
         path = f"files/{self.document_name}"
         document = fitz.open(path)
         text = self.prepare_text(document)
         sentences = self.answer(request, text)
         self.modifi_document(sentences, document)
+        return True
 
 
 
